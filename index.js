@@ -66,7 +66,13 @@ module.exports = function(query, cb, options) {
         r = request.post(options.overpassUrl || 'https://overpass-api.de/api/interpreter', reqOptions, 
             function (error, response, body) {
                 if (!error && response.statusCode === 200) {
-                    toGeoJSON(JSON.parse(body));
+                  try {
+                    var jsonBody = JSON.parse(body);
+                    toGeoJSON(jsonBody);
+                  } catch (e) {
+                    cb(e);
+                  }
+
                 } else if (error) {
                     cb(error);
                 } else if (response) {
