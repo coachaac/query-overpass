@@ -1,3 +1,4 @@
+'use strict';
 var osmtogeojson = require('osmtogeojson'),
     querystring = require('querystring'),
     request = require('request'),
@@ -8,7 +9,9 @@ var osmtogeojson = require('osmtogeojson'),
 module.exports = function(query, cb, options) {
     var contentType;
     options = options || {};
-
+  var toJSON = function(data) {
+    return cb(undefined, data);
+  };
     var toGeoJSON = function(data) {
         var geojson;
 
@@ -25,16 +28,15 @@ module.exports = function(query, cb, options) {
     }
 
     var reqOptions = {
-        headers: {
-            'content-type': 'application/x-www-form-urlencoded'
-        },
-        body: querystring.stringify({ data: query })
+    timeout: 480000,
+    headers: options.headers || {},
+    body: querystring.stringify({data: query}),
     };
-
+  reqOptions.headers['content-type'] = 'application/x-www-form-urlencoded';
     var r;
 
     if (!global.window) {
-        r = request.post(options.overpassUrl || 'http://overpass-api.de/api/interpreter', reqOptions);
+        r = request.post(options.overpassUrl || 'https://overpass-api.de/api/interpreter', reqOptions);
 
         r
             .on('response', function(response) {
@@ -48,9 +50,15 @@ module.exports = function(query, cb, options) {
                 contentType = response.headers['content-type'];
 
                 if (contentType.indexOf('json') >= 0) {
+			if (options.noGeoJSON == true) {
+			  r.pipe(JSONStream.parse())
+			    .on('data', toJSON)
+			    .on('error', cb);
+			} else {
                     r.pipe(JSONStream.parse())
                         .on('data', toGeoJSON)
                         .on('error', cb);
+       		}
                 } else if (contentType.indexOf('xml') >= 0) {
                     var body = '';
                     r.on('data', function (chunk) { body += chunk; })
@@ -61,13 +69,19 @@ module.exports = function(query, cb, options) {
                     });
                 }
             })
+            .on('error', cb);
     } else {
-        r = request.post(options.overpassUrl || 'http://overpass-api.de/api/interpreter', reqOptions,
+        r = request.post(options.overpassUrl || 'https://overpass-api.de/api/interpreter', reqOptions,
             function (error, response, body) {
                 if (!error && response.statusCode === 200) {
                   try {
                     var jsonBody = JSON.parse(body);
-                    toGeoJSON(jsonBody);
+            if (options.noGeoJSON == true) {
+              return toJSON(jsonBody);
+            } else {
+              return toGeoJSON(jsonBody);
+            }
+
                   } catch (e) {
                     cb(e);
                   }
